@@ -1,0 +1,10 @@
+galaxy_info:
+  author: grahamoon
+  description: Deploying splatnet2statink container
+  license: Apache
+  min_ansible_version: 2.10
+  platforms:
+    - name: Fedora
+      versions:
+        - 36
+

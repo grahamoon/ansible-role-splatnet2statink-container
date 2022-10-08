@@ -1,0 +1,9 @@
+[Unit]
+Description=Runs Podman container-splatnet2statink-{{ name }}.service
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec={{ delay }}
+
+[Install]
+WantedBy=timers.target

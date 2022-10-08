@@ -1,0 +1,98 @@
+---
+- name: Checkout splatnet2statink
+  ansible.builtin.git:
+    repo: https://github.com/frozenpandaman/splatnet2statink.git
+    dest: "{{ ansible_user_dir }}/splatnet2statink"
+    version: "v{{ splatnet2statink_version }}"
+    depth: 1
+    single_branch: yes
+  register: splatnet2statink_git
+
+- name: Copy Containerfile
+  ansible.builtin.copy:
+    src: Containerfile
+    dest: "{{ ansible_user_dir }}/splatnet2statink/"
+
+- name: Build splatnet2statink container image
+  containers.podman.podman_image:
+    name: splatnet2statink
+    tag: "{{ splatnet2statink_version }}"
+    path: "{{ ansible_user_dir }}/splatnet2statink/"
+    force: "{{ splatnet2statink_git.changed }}"
+    state: build
+
+- name: Create splatnet2statink config
+  ansible.builtin.copy:
+    dest: "{{ ansible_user_dir }}/splatnet2statink/config.txt.{{ item.name }}"
+    content: "{{ config_data | to_nice_json }}"
+  vars:
+    config_data:
+      api_key: "{{ item.api_key | default('') }}"
+      cookie: "{{ item.cookie | default('') }}"
+      session_token: "{{ item.session_token | default('') }}"
+      user_lang: "{{ item.user_lang | default('') }}"
+  loop: "{{ splatnet2statink_config }}"
+
+- name: Create splatnet2statink container
+  containers.podman.podman_container:
+    name: "splatnet2statink-{{ item.name }}"
+    image: "splatnet2statink:{{ splatnet2statink_version }}"
+    command: 'python splatnet2statink.py -r'
+    volume:
+      - "{{ ansible_user_dir }}/splatnet2statink/config.txt.{{ item.name }}:/app/config.txt:z"
+    generate_systemd:
+      path: "{{ ansible_user_dir }}/.config/systemd/user"
+    recreate: "{{ splatnet2statink_git.changed }}"
+    state: present
+  loop: "{{ splatnet2statink_config }}"
+
+- name: Create splatnet2statink container for salmon
+  containers.podman.podman_container:
+    name: "splatnet2statink-{{ item.name }}-salmon"
+    image: "splatnet2statink:{{ splatnet2statink_version }}"
+    command: 'python splatnet2statink.py -r --salmon'
+    volume:
+      - "{{ ansible_user_dir }}/splatnet2statink/config.txt.{{ item.name }}:/app/config.txt:z"
+    generate_systemd:
+      path: "{{ ansible_user_dir }}/.config/systemd/user"
+    recreate: "{{ splatnet2statink_git.changed }}"
+    state: present
+  when: item.salmon | default(False)
+  loop: "{{ splatnet2statink_config }}"
+
+- name: Copy timer unit file
+  ansible.builtin.template:
+    src: container-splatnet2statink.timer.j2
+    dest: "{{ ansible_user_dir }}/.config/systemd/user/container-splatnet2statink-{{ item.name }}.timer"
+  vars:
+    name: "{{ item.name }}"
+  loop: "{{ splatnet2statink_config }}"
+
+- name: Copy timer unit file for salmon
+  ansible.builtin.template:
+    src: container-splatnet2statink.timer.j2
+    dest: "{{ ansible_user_dir }}/.config/systemd/user/container-splatnet2statink-{{ item.name }}-salmon.timer"
+  vars:
+    name: "{{ item.name }}-salmon"
+  when: item.salmon | default(False)
+  loop: "{{ splatnet2statink_config }}"
+
+- name: Start and enable timer unit
+  ansible.builtin.systemd:
+    name: "container-splatnet2statink-{{ item.name }}.timer"
+    scope: user
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  loop: "{{ splatnet2statink_config }}"
+
+- name: Start and enable timer unit for salmon
+  ansible.builtin.systemd:
+    name: "container-splatnet2statink-{{ item.name }}-salmon.timer"
+    scope: user
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  when: item.salmon | default(False)
+  loop: "{{ splatnet2statink_config }}"
+
