@@ -66,6 +66,7 @@
     dest: "{{ ansible_user_dir }}/.config/systemd/user/container-splatnet2statink-{{ item.name }}.timer"
   vars:
     name: "{{ item.name }}"
+    delay: "{{ item.timer_delay }}"
   loop: "{{ splatnet2statink_config }}"
 
 - name: Copy timer unit file for salmon
@@ -74,6 +75,7 @@
     dest: "{{ ansible_user_dir }}/.config/systemd/user/container-splatnet2statink-{{ item.name }}-salmon.timer"
   vars:
     name: "{{ item.name }}-salmon"
+    delay: "{{ item.timer_delay }}"
   when: item.salmon | default(False)
   loop: "{{ splatnet2statink_config }}"
 
